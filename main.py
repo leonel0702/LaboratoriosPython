@@ -2,6 +2,7 @@ from database import SessionLocal, engine
 import models
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import date, time
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -75,3 +76,73 @@ def eliminar_producto(id: int, db: Session = Depends(get_db)):
   db.delete(producto)
   db.commit()
   return {"mensaje": f"Producto con id {id} eliminado correctamente"}
+
+# 1. Crear una venta (POST /ventas)
+@app.post("/ventas", status_code=status.HTTP_201_CREATED)
+def crear_venta(
+    id_producto: int,
+    cantidad: int,
+    fecha: date,
+    hora: time,
+    db: Session = Depends(get_db),
+):
+  # Verificar que el producto exista para obtener su precio
+  producto = (
+      db.query(models.ProductoModel)
+      .filter(models.ProductoModel.id == id_producto)
+      .first()
+  )
+  if not producto:
+    raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+  # Calcular el precio total automáticamente
+  precio_total = producto.precio * cantidad
+
+  nueva_venta = models.VentaModel(
+      id_producto=id_producto,
+      cantidad=cantidad,
+      fecha=fecha,
+      hora=hora,
+      precio_total=precio_total,
+  )
+
+  db.add(nueva_venta)
+  db.commit()
+  db.refresh(nueva_venta)
+  return nueva_venta
+
+
+# 2. Obtener listado de ventas (GET /ventas)
+@app.get("/ventas")
+def listar_ventas(db: Session = Depends(get_db)):
+  ventas = db.query(models.VentaModel).all()
+  return ventas
+
+
+# 3. Obtener una venta por ID (GET /ventas/{id})
+@app.get("/ventas/{id}")
+def obtener_venta(id: int, db: Session = Depends(get_db)):
+  venta = (
+      db.query(models.VentaModel)
+      .filter(models.VentaModel.id == id)
+      .first()
+  )
+  if not venta:
+    raise HTTPException(status_code=404, detail="Venta no encontrada")
+  return venta
+
+
+# 4. Eliminar una venta (DELETE /ventas/{id})
+@app.delete("/ventas/{id}")
+def eliminar_venta(id: int, db: Session = Depends(get_db)):
+  venta = (
+      db.query(models.VentaModel)
+      .filter(models.VentaModel.id == id)
+      .first()
+  )
+  if not venta:
+    raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+  db.delete(venta)
+  db.commit()
+  return {"mensaje": f"Venta con id {id} eliminada correctamente"}
